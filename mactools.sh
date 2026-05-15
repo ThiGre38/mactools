@@ -41,15 +41,7 @@ contains_element() {
     return 1
 }
 
-# --- Main Logic ---
-
-echo -e "\n${BLUE}${BOLD}mactools: MacOS App Thinner${NC}"
-echo ${LINE}
-echo "This script will scan for Universal apps and offer to remove the Intel (x86_64) or Arm64 portion"
-echo "of code in accordance with architecture."
-echo ""
-
-# 1. Architecture Check: Ensure the script is running on a Mac.
+# Check the OS and display information
 function detect_os() {
     OSV="$(uname -o)"
     OSR="$(uname -r)"
@@ -65,9 +57,8 @@ function detect_os() {
     echo -e "             OS version: ${OSV}, ${OSR}\n"
 }
 
- #Detect OS for correct architecture
-detect_os
-
+# Scans the Application folder looking for Universal apps
+function scanning_app(){
 echo -e "🔎 ${YELLOW}Scanning /Applications for Universal Binaries...${NC}"
 echo ${LINE}
 
@@ -108,48 +99,99 @@ for APP_PATH in "/Applications"/*.app; do
 done
 
 echo ${LINE}
+}
 
-# 3. Confirmation and Processing
-if [ ${#UNIVERSAL_BINARIES[@]} -eq 0 ]; then
-    echo -e "👍 ${GREEN}No Universal applications requiring changes were found. All done!${NC}"
-    exit 0
-fi
-
-echo -e "The following ${BOLD}${YELLOW}${#UNIVERSAL_BINARIES[@]}${NC} Universal application(s) can be thinned:"
-printf " - %s\n" "${UNIVERSAL_APP_NAMES[@]}"
-echo ""
-echo -e "${YELLOW}${BOLD}Important:${NC} This operation modifies application files and requires administrator privileges."
-echo -e "On its first run, macOS may ask you to grant ${BOLD}Terminal${NC} permission for ${BOLD}'App Management'${NC} in System Settings."
-echo ""
-
-read -p "Do you want to strip the unnecessary binary from ALL of these apps? (y/n): " CONFIRMATION
-LOWER_CONFIRMATION=$(echo "$CONFIRMATION" | tr '[:upper:]' '[:lower:]')
-
-if [[ "$LOWER_CONFIRMATION" == "y" || "$LOWER_CONFIRMATION" == "yes" ]]; then
-    echo ""
-    echo -e "🚀 ${BLUE}Stripping binaries... You will be prompted for your password.${NC}"
-
-    PROCESSED_COUNT=0
-    if [[ "$MAC" == "silicon" ]]; then
-        ARCH="x86_64"
-    else
-        ARCH="arm64"
+function thinning_apps(){
+    if [ ${#UNIVERSAL_BINARIES[@]} -eq 0 ]; then
+        echo -e "👍 ${GREEN}No Universal applications requiring changes were found. All done!${NC}"
+        exit 0
     fi
-    for BINARY_PATH in "${UNIVERSAL_BINARIES[@]}"; do
-        # Use sudo with the lipo command to request privileges only when needed.
-        if sudo lipo -remove "$ARCH" -output "$BINARY_PATH" "$BINARY_PATH"; then
-            ((PROCESSED_COUNT++))
+
+    echo -e "The following ${BOLD}${YELLOW}${#UNIVERSAL_BINARIES[@]}${NC} Universal application(s) can be thinned:"
+    printf " - %s\n" "${UNIVERSAL_APP_NAMES[@]}"
+    echo ""
+    echo -e "${YELLOW}${BOLD}Important:${NC} This operation modifies application files and requires administrator privileges."
+    echo -e "On its first run, macOS may ask you to grant ${BOLD}Terminal${NC} permission for ${BOLD}'App Management'${NC} in System Settings."
+    echo ""
+
+    read -p "Do you want to strip the unnecessary binary from ALL of these apps? (y/n): " CONFIRMATION
+    LOWER_CONFIRMATION=$(echo "$CONFIRMATION" | tr '[:upper:]' '[:lower:]')
+
+    if [[ "$LOWER_CONFIRMATION" == "y" || "$LOWER_CONFIRMATION" == "yes" ]]; then
+        echo ""
+        echo -e "🚀 ${BLUE}Stripping binaries... You will be prompted for your password.${NC}"
+
+        PROCESSED_COUNT=0
+        if [[ "$MAC" == "silicon" ]]; then
+            ARCH="x86_64"
         else
-            APP_NAME_FROM_PATH=$(basename "$(dirname "$(dirname "$BINARY_PATH")")" .app)
-            echo -e "${RED}Failed to strip binary for \"${APP_NAME_FROM_PATH}\".${NC}"
+            ARCH="arm64"
         fi
-    done
+        for BINARY_PATH in "${UNIVERSAL_BINARIES[@]}"; do
+            # Use sudo with the lipo command to request privileges only when needed.
+            if sudo lipo -remove "$ARCH" -output "$BINARY_PATH" "$BINARY_PATH"; then
+                ((PROCESSED_COUNT++))
+            else
+                APP_NAME_FROM_PATH=$(basename "$(dirname "$(dirname "$BINARY_PATH")")" .app)
+                echo -e "${RED}Failed to strip binary for \"${APP_NAME_FROM_PATH}\".${NC}"
+            fi
+        done
+
+        echo ${LINE}
+        echo -e "✨ ${GREEN}All done. Processed ${PROCESSED_COUNT} application(s).${NC}"
+    else
+        echo -e "👍 ${YELLOW}Operation cancelled. No changes were made.${NC}"
+    fi
 
     echo ${LINE}
-    echo -e "✨ ${GREEN}All done. Processed ${PROCESSED_COUNT} application(s).${NC}"
-else
-    echo -e "👍 ${YELLOW}Operation cancelled. No changes were made.${NC}"
-fi
+}
 
+function thinning_one_app(){
+    read -p "Do you want to strip the unnecessary binary from A SINGLE app? (y/n): " CONFIRMATION
+    LOWER_CONFIRMATION=$(echo "$CONFIRMATION" | tr '[:upper:]' '[:lower:]')
+
+    if [[ "$LOWER_CONFIRMATION" == "y" || "$LOWER_CONFIRMATION" == "yes" ]]; then
+        echo ""
+        echo -e "🚀 ${BLUE}Stripping binary... You will be prompted for your password.${NC}"
+        if [[ "$MAC" == "silicon" ]]; then
+            ARCH="x86_64"
+        else
+            ARCH="arm64"
+        fi
+        for BINARY_PATH in "${UNIVERSAL_BINARIES[@]}"; do
+            # Use sudo with the lipo command to request privileges only when needed.
+            if sudo lipo -remove "$ARCH" -output "$BINARY_PATH" "$BINARY_PATH"; then
+                ((PROCESSED_COUNT++))
+            else
+                APP_NAME_FROM_PATH=$(basename "$(dirname "$(dirname "$BINARY_PATH")")" .app)
+                echo -e "${RED}Failed to strip binary for \"${APP_NAME_FROM_PATH}\".${NC}"
+            fi
+        done
+
+        echo ${LINE}
+        echo -e "✨ ${GREEN}All done. Processed ${PROCESSED_COUNT} application(s).${NC}"
+    else
+        echo -e "👍 ${YELLOW}Operation cancelled. No changes were made.${NC}"
+    fi
+
+    echo ${LINE}
+}
+
+# --- Main Logic ---
+
+echo -e "\n${BLUE}${BOLD}mactools: MacOS App Thinner${NC}"
 echo ${LINE}
+echo "This script will scan for Universal apps and offer to remove the Intel (x86_64) or Arm64 portion"
+echo "of code in accordance with architecture."
+echo ""
+
+# 1. Architecture Check: Ensure the script is running on a Mac.
+#Detect OS for correct architecture
+detect_os
+# 2. Scan the Application folder
+scanning_app
+# 3. Confirmation and Processing for all apps
+thinning_apps
+# 4. Confirmation and Processing for a single app
+thinning_one_app
 exit 0
