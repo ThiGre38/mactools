@@ -1,17 +1,13 @@
-#!/bin/bash
-
-# ==============================================================================
-#
-# macOS App Thinner
-#
-# A script to find Universal macOS applications and strip the non-native
-# architecture (x86_64) to save disk space on Apple Silicon Macs.
-#
-# Author: Your Name
-# Version: 1.0.0
-# License: MIT
-#
-# ==============================================================================
+#!/usr/bin/env bash
+#: Title       : mactools.sh
+#: Date        : 2026-05-15
+#: Updated     :
+#: Author      : Thierry Gautier <thierry.gautier@univ-grenoble-alpes.fr>
+#: Version     : 0.1
+#: Description : Collection of personal cli macOS tools.
+#: Usage       : ./mactools [options]
+#: Options     :
+set -euo pipefail
 
 # --- Configuration ---
 
@@ -21,12 +17,18 @@ EXCLUDED_APPS=(
 )
 
 # --- ANSI Color Codes for Better Output ---
-C_RESET='\033[0m'
-C_RED='\033[0;31m'
-C_GREEN='\033[0;32m'
-C_YELLOW='\033[0;33m'
-C_BLUE='\033[0;34m'
-C_BOLD='\033[1m'
+VERSION="0.1"
+NC='\033[0m' # No Color
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+BOLD='\033[1m'
+CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
+LINE="--------------------------------------------------"
+#HIERARCHY_DIR="${HOME}/Documents/BIO713/TP/files/pombe"
+#TARGET_DIR="${HOME}/Documents/BIO713/TP"
 
 # --- Functions ---
 
@@ -41,18 +43,33 @@ contains_element() {
 
 # --- Main Logic ---
 
-echo -e "${C_BLUE}${C_BOLD}macOS App Thinner${C_RESET}"
-echo "This script will scan for Universal apps and offer to remove the Intel (x86_64) portion."
+echo -e "\n${BLUE}${BOLD}mactools: MacOS App Thinner${NC}"
+echo ${LINE}
+echo "This script will scan for Universal apps and offer to remove the Intel (x86_64) or Arm64 portion"
+echo "of code in accordance with architecture."
 echo ""
 
-# 1. Architecture Check: Ensure the script is running on an Apple Silicon Mac.
-if ! [[ "$(uname -m)" == "arm64" ]]; then
-    echo -e "${C_RED}Error: This script is designed to run only on Apple Silicon (arm64) Macs.${C_RESET}"
-    exit 1
-fi
+# 1. Architecture Check: Ensure the script is running on a Mac.
+function detect_os() {
+    OSV="$(uname -o)"
+    OSR="$(uname -r)"
+    proc="$(uname -m)"
+    case "$proc" in
+        arm64*) MAC="silicon"; echo -e "${YELLOW}💻 Script launched on Apple Silicon Mac${NC}";;
+        x86_64*) MAC="intel"; echo -e "${YELLOW}💻 Script launched on Intel Mac${NC}";;
+        *) echo -e "${RED}Error: This script is designed to run only on Apple Silicon (arm64) or Intel (x86_64) Macs.${NC}";
+           echo -e "${RED}==> Unsupported OS $OS{$NC}"; exit 1 ;;
+    esac
+    echo ${LINE}
+    echo -e "             Processor: ${proc}"
+    echo -e "             OS version: ${OSV}, ${OSR}\n"
+}
 
-echo -e "🔎 ${C_YELLOW}Scanning /Applications for Universal Binaries...${C_RESET}"
-echo "--------------------------------------------------"
+ #Detect OS for correct architecture
+detect_os
+
+echo -e "🔎 ${YELLOW}Scanning /Applications for Universal Binaries...${NC}"
+echo ${LINE}
 
 UNIVERSAL_BINARIES=()
 UNIVERSAL_APP_NAMES=()
@@ -73,7 +90,7 @@ for APP_PATH in "/Applications"/*.app; do
 
     EXECUTABLE_NAME=$(defaults read "${PLIST_PATH}" CFBundleExecutable 2>/dev/null)
     [ -z "$EXECUTABLE_NAME" ] && continue
-    
+
     BINARY_PATH="${APP_PATH}/Contents/MacOS/${EXECUTABLE_NAME}"
 
     # Check if the binary exists and is a "fat" file with both architectures.
@@ -82,52 +99,57 @@ for APP_PATH in "/Applications"/*.app; do
 
         if echo "$ARCH_INFO" | grep -q "x86_64" && echo "$ARCH_INFO" | grep -q "arm64"; then
             APP_NAME=$(basename "$APP_PATH" .app)
-            echo -e "✅ Found: \"${C_BOLD}${APP_NAME}${C_RESET}\""
-            
+            echo -e "✅ Found: \"${BOLD}${APP_NAME}${NC}\""
+
             UNIVERSAL_BINARIES+=("$BINARY_PATH")
             UNIVERSAL_APP_NAMES+=("$APP_NAME")
         fi
     fi
 done
 
-echo "--------------------------------------------------"
+echo ${LINE}
 
 # 3. Confirmation and Processing
 if [ ${#UNIVERSAL_BINARIES[@]} -eq 0 ]; then
-    echo -e "👍 ${C_GREEN}No Universal applications requiring changes were found. All done!${C_RESET}"
+    echo -e "👍 ${GREEN}No Universal applications requiring changes were found. All done!${NC}"
     exit 0
 fi
 
-echo -e "The following ${C_BOLD}${C_YELLOW}${#UNIVERSAL_BINARIES[@]}${C_RESET} Universal application(s) can be thinned:"
+echo -e "The following ${BOLD}${YELLOW}${#UNIVERSAL_BINARIES[@]}${NC} Universal application(s) can be thinned:"
 printf " - %s\n" "${UNIVERSAL_APP_NAMES[@]}"
 echo ""
-echo -e "${C_YELLOW}${C_BOLD}Important:${C_RESET} This operation modifies application files and requires administrator privileges."
-echo -e "On its first run, macOS may ask you to grant ${C_BOLD}Terminal${C_RESET} permission for ${C_BOLD}'App Management'${C_RESET} in System Settings."
+echo -e "${YELLOW}${BOLD}Important:${NC} This operation modifies application files and requires administrator privileges."
+echo -e "On its first run, macOS may ask you to grant ${BOLD}Terminal${NC} permission for ${BOLD}'App Management'${NC} in System Settings."
 echo ""
 
-read -p "Do you want to strip the Intel binary from ALL of these apps? (y/n): " CONFIRMATION
+read -p "Do you want to strip the unnecessary binary from ALL of these apps? (y/n): " CONFIRMATION
 LOWER_CONFIRMATION=$(echo "$CONFIRMATION" | tr '[:upper:]' '[:lower:]')
 
 if [[ "$LOWER_CONFIRMATION" == "y" || "$LOWER_CONFIRMATION" == "yes" ]]; then
     echo ""
-    echo -e "🚀 ${C_BLUE}Stripping binaries... You will be prompted for your password.${C_RESET}"
-    
+    echo -e "🚀 ${BLUE}Stripping binaries... You will be prompted for your password.${NC}"
+
     PROCESSED_COUNT=0
+    if [[ "$MAC" == "silicon" ]]; then
+        ARCH="x86_64"
+    else
+        ARCH="arm64"
+    fi
     for BINARY_PATH in "${UNIVERSAL_BINARIES[@]}"; do
         # Use sudo with the lipo command to request privileges only when needed.
-        if sudo lipo -remove x86_64 -output "$BINARY_PATH" "$BINARY_PATH"; then
+        if sudo lipo -remove "$ARCH" -output "$BINARY_PATH" "$BINARY_PATH"; then
             ((PROCESSED_COUNT++))
         else
             APP_NAME_FROM_PATH=$(basename "$(dirname "$(dirname "$BINARY_PATH")")" .app)
-            echo -e "${C_RED}Failed to strip binary for \"${APP_NAME_FROM_PATH}\".${C_RESET}"
+            echo -e "${RED}Failed to strip binary for \"${APP_NAME_FROM_PATH}\".${NC}"
         fi
     done
-    
-    echo "--------------------------------------------------"
-    echo -e "✨ ${C_GREEN}All done. Processed ${PROCESSED_COUNT} application(s).${C_RESET}"
+
+    echo ${LINE}
+    echo -e "✨ ${GREEN}All done. Processed ${PROCESSED_COUNT} application(s).${NC}"
 else
-    echo -e "👍 ${C_YELLOW}Operation cancelled. No changes were made.${C_RESET}"
+    echo -e "👍 ${YELLOW}Operation cancelled. No changes were made.${NC}"
 fi
 
-echo "--------------------------------------------------"
+echo ${LINE}
 exit 0
